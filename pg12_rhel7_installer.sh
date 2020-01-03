@@ -4,9 +4,6 @@ PG_ADMPWD=P@ssw0rd#1
 PG_NET_ALLOW=192.168.43.0/24
 PG_PORT=5342
 
-echo "Remove mariadb-libs conflict package with PostgreSQL............."
-yum -y remove mariadb-libs
-
 echo "Install PostgreSQL yum repository (latest version)..............."
 yum -y install https://download.postgresql.org/pub/repos/yum/reporpms/EL-7-x86_64/pgdg-redhat-repo-latest.noarch.rpm
 
@@ -99,11 +96,12 @@ echo "Connection and Login......................................."
 sudo -u postgres psql <<'EOF'
 -- Set listen address to any address --
 alter system set listen_addresses = '*';
--- Set listen port to any PG_PORT value --
-alter system set port = '$PG_PORT';
 -- Set password encryption with scram-sha-256 --
 alter system set password_encryption = 'scram-sha-256';
 EOF
+echo "Set listen custom PG port.................................."
+sudo -u postgres psql -c "alter system set port = '$PG_PORT';"
+
 echo "If you use new port, please make sure to allow it from SELinux..."
 yum -y install policycoreutils-python
 semanage port -a -t postgresql_port_t -p tcp $PG_PORT
@@ -126,7 +124,9 @@ sudo -u postgres psql -c "alter role postgres with password '$PG_ADMPWD';"
 echo "Local Firewall Settings..................................."
 firewall-cmd --permanent --new-ipset=PG_USER --type=hash:net
 firewall-cmd --permanent --ipset=PG_USER --add-entry=$PG_NET_ALLOW
-firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source ipset="PG_USER" port port="$PG_PORT" protocol="tcp" accept'
+firewall-cmd --permanent --service=postgresql --remove-port=5432/tcp
+firewall-cmd --permanent --service=postgresql --add-port=$PG_PORT/tcp
+firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source ipset="PG_USER" service name="postgresql" accept'
 firewall-cmd --reload
 
 echo "...End of Config!..................................Thanks!"
