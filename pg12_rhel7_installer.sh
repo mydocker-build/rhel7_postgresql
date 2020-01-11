@@ -1,25 +1,35 @@
 #!/bin/bash
 # Settins here
 PG_ADMPWD=P@ssw0rd#1
-PG_NET_ALLOW=192.168.43.0/24
+PG_DATA=/srv/pgdata
 PG_PORT=5342
+PG_NETALLOW=192.168.43.0/24
 
 echo "Install PostgreSQL yum repository (latest version)..............."
 yum -y install https://download.postgresql.org/pub/repos/yum/reporpms/EL-7-x86_64/pgdg-redhat-repo-latest.noarch.rpm
 
 echo "Install the PostgreSQL client/server packages...................."
-yum -y install postgresql12 postgresql12-server pgaudit14_12
+yum -y install postgresql12 postgresql12-server pgaudit14_12 policycoreutils-python
 
-echo "Set the specific PGDATA, in case PGDATA=/var/lib/pgsql/data......"
-cat >> ~/.bash_profile <<'EOF'
-# Set PGDATA path
-PGDATA=/var/lib/pgsql/data
-export PGDATA
+echo "Set PGDATA with specific path from variable......................"
+cat > /etc/profile.d/pgenv.sh <<EOF
+# PostgreSQL Data Path
+export PGDATA=$PG_DATA
+export PGPORT=$PG_PORT
 EOF
-source ~/.bash_profile
+chown root:root /etc/profile.d/pgenv.sh
+chmod +x /etc/profile.d/pgenv.sh
+source ~/.bashrc
 sed -i "s@^Environment=PGDATA=.*@Environment=PGDATA=$PGDATA@" /usr/lib/systemd/system/postgresql*.service
 sed -i "s@^PGDATA=.*@PGDATA=$PGDATA@" /var/lib/pgsql/.bash_profile
 systemctl daemon-reload
+
+echo "Create PGDATA directory.........................................."
+mkdir -p $PGDATA
+chown -R postgres:postgres $PGDATA
+chmod o-rwx $PGDATA
+semanage fcontext -a -t postgresql_db_t "$PGDATA(/.*)?"
+restorecon -Rv $PGDATA
 
 echo "First initialize the PostgreSQL database server after install....."
 PGSETUP_INITDB_OPTIONS="-k" /usr/pgsql-12/bin/postgresql-12-setup initdb
@@ -100,11 +110,10 @@ alter system set listen_addresses = '*';
 alter system set password_encryption = 'scram-sha-256';
 EOF
 echo "Set listen custom PG port.................................."
-sudo -u postgres psql -c "alter system set port = '$PG_PORT';"
+sudo -u postgres psql -c "alter system set port = '$PGPORT';"
 
 echo "If you use new port, please make sure to allow it from SELinux..."
-yum -y install policycoreutils-python
-semanage port -a -t postgresql_port_t -p tcp $PG_PORT
+semanage port -a -t postgresql_port_t -p tcp $PGPORT
 
 cp $PGDATA/pg_hba.conf $PGDATA/pg_hba.conf_`date +"%d%m%Y"`
 cat > $PGDATA/pg_hba.conf <<'EOF'
@@ -113,14 +122,14 @@ cat > $PGDATA/pg_hba.conf <<'EOF'
 local          all             all                         peer
 EOF
 systemctl restart postgresql-12
-sudo -u postgres psql -c "alter role postgres with password '$PG_ADMPWD';"
+sudo -u postgres psql -p $PGPORT -c "alter role postgres with password '$PG_ADMPWD';"
 
 echo "Local Firewall Settings..................................."
-firewall-cmd --permanent --new-ipset=PG_USER --type=hash:net
-firewall-cmd --permanent --ipset=PG_USER --add-entry=$PG_NET_ALLOW
+firewall-cmd --permanent --new-ipset=NET_PGUSER --type=hash:net
+firewall-cmd --permanent --ipset=NET_PGUSER --add-entry=$PG_NETALLOW
 firewall-cmd --permanent --service=postgresql --remove-port=5432/tcp
 firewall-cmd --permanent --service=postgresql --add-port=$PG_PORT/tcp
-firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source ipset="PG_USER" service name="postgresql" accept'
+firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source ipset="NET_PGUSER" service name="postgresql" accept'
 firewall-cmd --reload
 
 echo "...End of Config!..................................Thanks!"
