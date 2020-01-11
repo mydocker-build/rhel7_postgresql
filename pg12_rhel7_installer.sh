@@ -111,12 +111,6 @@ cat > $PGDATA/pg_hba.conf <<'EOF'
 # TYPE         DATABASE        USER        ADDRESS         METHOD
 # Only local be able to access Postgres with "peer"
 local          all             all                         peer
-
-# Allow replication connections from localhost by a user with the replication privilege.
-local          replication     all                         peer
-host           replication     all         127.0.0.1/32    ident
-host           replication     all         ::1/128         ident
-
 EOF
 systemctl restart postgresql-12
 sudo -u postgres psql -c "alter role postgres with password '$PG_ADMPWD';"
