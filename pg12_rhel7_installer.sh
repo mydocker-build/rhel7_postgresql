@@ -122,7 +122,7 @@ cat > $PGDATA/pg_hba.conf <<'EOF'
 local          all             all                         peer
 EOF
 systemctl restart postgresql-12
-sudo -u postgres psql -p $PGPORT -c "alter role postgres with password '$PG_ADMPWD';"
+sudo -u postgres psql -p $PGPORT -p $PGPORT -c "alter role postgres with password '$PG_ADMPWD';"
 
 echo "Local Firewall Settings..................................."
 firewall-cmd --permanent --new-ipset=NET_PGUSER --type=hash:net
