@@ -119,7 +119,11 @@ cp $PGDATA/pg_hba.conf $PGDATA/pg_hba.conf_`date +"%d%m%Y"`
 cat > $PGDATA/pg_hba.conf <<'EOF'
 # TYPE         DATABASE        USER        ADDRESS         METHOD
 # Only local be able to access Postgres with "peer"
-local          all             all                         peer
+local    all    all        peer
+
+# Also allow the host unrestricted access to connect to itself
+host    all     all    127.0.0.1/32    trust
+host    all     all    ::1/128         trust
 EOF
 systemctl restart postgresql-12
 sudo -u postgres psql -p $PGPORT -p $PGPORT -c "alter role postgres with password '$PG_ADMPWD';"
